@@ -1,0 +1,77 @@
+package com.bankofbaku.bolkartservice.repositories;
+
+import com.bankofbaku.bolkartservice.entities.Campaign;
+import com.bankofbaku.bolkartservice.entities.Translation;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Repository;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+
+@Repository
+@RequiredArgsConstructor
+public class CampaignCriteriaRepository {
+    private final EntityManager entityManager;
+
+    public Page<Campaign> findCampaignsWithFilters(Pageable pageable,
+                                                   String headerName,
+                                                   Boolean active,
+                                                   Boolean hidden,
+                                                   Boolean atCashback,
+                                                   Date startDate,
+                                                   Date endDate) {
+        CriteriaBuilder builder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Campaign> query = builder.createQuery(Campaign.class);
+        Root<Campaign> root = query.from(Campaign.class);
+
+        Join<Campaign, Translation> headerJoin = root.join("header");
+
+        List<Predicate> predicates = new ArrayList<>();
+        predicates.add(builder.equal(root.get("status"), true));
+
+        if (active != null) {
+            predicates.add(builder.equal(root.get("active"), active));
+        }
+        if (hidden != null) {
+            predicates.add(builder.equal(root.get("hidden"), hidden));
+        }
+        if (atCashback != null) {
+            predicates.add(builder.equal(root.get("atCashback"), atCashback));
+        }
+        if (startDate != null) {
+            predicates.add(builder.greaterThanOrEqualTo(root.get("createDate"), startDate));
+        }
+        if (endDate != null) {
+            predicates.add(builder.lessThanOrEqualTo(root.get("createDate"), endDate));
+        }
+
+        if (headerName != null) {
+            String lowerCaseName = headerName.toLowerCase();
+            Path<String> azPath = headerJoin.get("az");
+            Path<String> enPath = headerJoin.get("en");
+            Path<String> ruPath = headerJoin.get("ru");
+
+            predicates.add(builder.or(
+                    builder.like(builder.lower(azPath), "%" + lowerCaseName + "%"),
+                    builder.like(builder.lower(enPath), "%" + lowerCaseName + "%"),
+                    builder.like(builder.lower(ruPath), "%" + lowerCaseName + "%")
+            ));
+        }
+
+        query.where(predicates.toArray(new Predicate[0]));
+        query.orderBy(builder.desc(root.get("orderNumber")));
+
+        List<Campaign> campaignList = entityManager.createQuery(query).getResultList();
+        return new PageImpl<Campaign>(campaignList, pageable, campaignList.size());
+    }
+
+
+
+}
